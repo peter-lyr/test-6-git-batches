@@ -1514,7 +1514,7 @@ void process_git_groups(GroupResult *result, const char *commit_info_file) {
       execute_git_command(commit_command);
     }
 
-    execute_git_command("git push");
+    // execute_git_command("git push");
 
     printf("分组 %d 处理完成\n\n", i + 1);
   }
