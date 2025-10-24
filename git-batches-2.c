@@ -161,6 +161,35 @@ void get_directory_path(const char *filepath, char *dirpath,
   }
 }
 
+// 转换为短路径格式（8.3格式，避免中文问题）
+int convert_to_short_path(const char *long_path, char *short_path,
+                          size_t short_path_size) {
+  wchar_t *wlong_path = char_to_wchar(long_path);
+  if (!wlong_path) {
+    return 0;
+  }
+
+  wchar_t wshort_path[MAX_PATH_LENGTH];
+  DWORD result = GetShortPathNameW(wlong_path, wshort_path, MAX_PATH_LENGTH);
+
+  free(wlong_path);
+
+  if (result == 0 || result > MAX_PATH_LENGTH) {
+    return 0;
+  }
+
+  // 转换回多字节
+  char *mb_short_path = wchar_to_char(wshort_path);
+  if (!mb_short_path) {
+    return 0;
+  }
+
+  strcpy_s(short_path, short_path_size, mb_short_path);
+  free(mb_short_path);
+
+  return 1;
+}
+
 // 分割大文件
 int split_large_file(const char *filepath, long long file_size,
                      char split_files[][MAX_PATH_LENGTH], int *num_parts) {
@@ -1357,35 +1386,6 @@ int retry_git_add_with_short_path(const char *command) {
   free(wnew_command);
 
   return (result == 0);
-}
-
-// 转换为短路径格式（8.3格式，避免中文问题）
-int convert_to_short_path(const char *long_path, char *short_path,
-                          size_t short_path_size) {
-  wchar_t *wlong_path = char_to_wchar(long_path);
-  if (!wlong_path) {
-    return 0;
-  }
-
-  wchar_t wshort_path[MAX_PATH_LENGTH];
-  DWORD result = GetShortPathNameW(wlong_path, wshort_path, MAX_PATH_LENGTH);
-
-  free(wlong_path);
-
-  if (result == 0 || result > MAX_PATH_LENGTH) {
-    return 0;
-  }
-
-  // 转换回多字节
-  char *mb_short_path = wchar_to_char(wshort_path);
-  if (!mb_short_path) {
-    return 0;
-  }
-
-  strcpy_s(short_path, short_path_size, mb_short_path);
-  free(mb_short_path);
-
-  return 1;
 }
 
 // 创建分组特定的 commit 信息文件
