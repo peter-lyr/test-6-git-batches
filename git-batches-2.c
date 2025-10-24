@@ -1508,10 +1508,10 @@ void run_grouping_test(char *paths[], int path_count,
   free_group_result(&result);
 }
 
-// 从 git status --porcelain 获取文件列表
+// 从 git status --porcelain 获取文件列表（修复版本）
 char **get_git_status_files(int *file_count) {
   FILE *fp;
-  char buffer[MAX_PATH_LENGTH];
+  char buffer[MAX_PATH_LENGTH * 2]; // 增加缓冲区大小
   char **files = NULL;
   int count = 0;
   int capacity = 100;
@@ -1538,26 +1538,71 @@ char **get_git_status_files(int *file_count) {
     size_t len = strlen(buffer);
     if (len > 0 && buffer[len - 1] == '\n') {
       buffer[len - 1] = '\0';
+      len--;
+    }
+    if (len > 0 && buffer[len - 1] == '\r') {
+      buffer[len - 1] = '\0';
+      len--;
     }
 
-    // 跳过 git status 的状态码（前2个字符加一个空格）
-    char *file_path = buffer;
-    if (strlen(file_path) >= 3) {
-      file_path += 3; // 跳过状态码和空格
+    if (len < 4)
+      continue; // 行太短，跳过
 
-      // 检查是否需要扩展数组
-      if (count >= capacity) {
-        capacity *= 2;
-        files = realloc(files, sizeof(char *) * capacity);
+    // git status --porcelain 格式:
+    // XY filename
+    // 或者 XY "filename with spaces"
+    char *file_path = NULL;
+
+    // 跳过状态码（前2个字符）
+    char *path_start = buffer + 3; // 跳过 "XY "
+
+    // 跳过可能存在的多余空格
+    while (*path_start == ' ') {
+      path_start++;
+    }
+
+    if (path_start >= buffer + len)
+      continue; // 没有有效路径
+
+    // 检查路径是否被引号包围
+    if (*path_start == '"') {
+      // 引号包围的路径
+      char *quote_end = strchr(path_start + 1, '"');
+      if (quote_end != NULL) {
+        *quote_end = '\0';          // 结束字符串
+        file_path = path_start + 1; // 跳过开头的引号
+      } else {
+        // 没有匹配的结束引号，使用整个剩余字符串
+        file_path = path_start + 1; // 跳过开头的引号
       }
+    } else {
+      // 没有引号的路径
+      file_path = path_start;
 
-      // 复制文件路径
-      files[count] = malloc(strlen(file_path) + 1);
-      strcpy(files[count], file_path);
-      count++;
-
-      printf("  找到文件: %s\n", file_path);
+      // 去除可能的尾部空格
+      char *end = file_path + strlen(file_path) - 1;
+      while (end > file_path && (*end == ' ' || *end == '\t')) {
+        *end = '\0';
+        end--;
+      }
     }
+
+    if (file_path == NULL || strlen(file_path) == 0) {
+      continue; // 跳过空路径
+    }
+
+    // 检查是否需要扩展数组
+    if (count >= capacity) {
+      capacity *= 2;
+      files = realloc(files, sizeof(char *) * capacity);
+    }
+
+    // 复制文件路径
+    files[count] = malloc(strlen(file_path) + 1);
+    strcpy(files[count], file_path);
+    count++;
+
+    printf("  找到文件: [状态: %.2s] %s\n", buffer, file_path);
   }
 
   _pclose(fp);
