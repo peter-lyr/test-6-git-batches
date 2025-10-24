@@ -190,6 +190,91 @@ int convert_to_short_path(const char *long_path, char *short_path,
   return 1;
 }
 
+// 使用短路径重试 git add
+int retry_git_add_with_short_path(const char *command) {
+  // 提取路径部分
+  const char *add_cmd = "git add";
+  if (strncmp(command, add_cmd, strlen(add_cmd)) != 0) {
+    return 0;
+  }
+
+  // 构建新的命令
+  char new_command[MAX_COMMAND_LENGTH] = "git add";
+  int current_length = strlen(new_command);
+
+  // 解析原命令中的路径
+  const char *path_start = command + strlen(add_cmd);
+  while (*path_start == ' ')
+    path_start++; // 跳过空格
+
+  // 逐个处理路径
+  const char *ptr = path_start;
+  while (*ptr) {
+    // 查找路径边界（引号或空格）
+    int use_quotes = 0;
+    const char *path_end;
+
+    if (*ptr == '"') {
+      use_quotes = 1;
+      ptr++; // 跳过开头的引号
+      path_end = strchr(ptr, '"');
+    } else {
+      path_end = strchr(ptr, ' ');
+    }
+
+    if (!path_end) {
+      path_end = ptr + strlen(ptr);
+    }
+
+    // 提取单个路径
+    char single_path[MAX_PATH_LENGTH];
+    size_t path_len = path_end - ptr;
+    if (path_len >= MAX_PATH_LENGTH) {
+      path_len = MAX_PATH_LENGTH - 1;
+    }
+    strncpy(single_path, ptr, path_len);
+    single_path[path_len] = '\0';
+
+    // 转换为短路径格式
+    char short_path[MAX_PATH_LENGTH];
+    if (convert_to_short_path(single_path, short_path, sizeof(short_path))) {
+      // 添加到新命令
+      char temp[MAX_PATH_LENGTH + 10];
+      _snprintf_s(temp, sizeof(temp), _TRUNCATE, " \"%s\"", short_path);
+
+      if (current_length + strlen(temp) < MAX_COMMAND_LENGTH) {
+        strcat_s(new_command, MAX_COMMAND_LENGTH, temp);
+        current_length += strlen(temp);
+      }
+    } else {
+      // 转换失败，使用原路径（确保用引号包围）
+      char temp[MAX_PATH_LENGTH + 10];
+      _snprintf_s(temp, sizeof(temp), _TRUNCATE, " \"%s\"", single_path);
+
+      if (current_length + strlen(temp) < MAX_COMMAND_LENGTH) {
+        strcat_s(new_command, MAX_COMMAND_LENGTH, temp);
+        current_length += strlen(temp);
+      }
+    }
+
+    // 移动到下一个路径
+    ptr = path_end;
+    if (*ptr == '"')
+      ptr++;
+    while (*ptr == ' ')
+      ptr++;
+  }
+
+  printf("重试命令: %s\n", new_command);
+
+  // 执行新命令
+  wchar_t *wnew_command = char_to_wchar(new_command);
+  int result = _wsystem(wnew_command);
+  free(wnew_command);
+
+  return (result == 0);
+}
+
 // 分割大文件
 int split_large_file(const char *filepath, long long file_size,
                      char split_files[][MAX_PATH_LENGTH], int *num_parts) {
@@ -1301,91 +1386,6 @@ int execute_git_command(const char *command) {
 
   free(wcommand);
   return result;
-}
-
-// 使用短路径重试 git add
-int retry_git_add_with_short_path(const char *command) {
-  // 提取路径部分
-  const char *add_cmd = "git add";
-  if (strncmp(command, add_cmd, strlen(add_cmd)) != 0) {
-    return 0;
-  }
-
-  // 构建新的命令
-  char new_command[MAX_COMMAND_LENGTH] = "git add";
-  int current_length = strlen(new_command);
-
-  // 解析原命令中的路径
-  const char *path_start = command + strlen(add_cmd);
-  while (*path_start == ' ')
-    path_start++; // 跳过空格
-
-  // 逐个处理路径
-  const char *ptr = path_start;
-  while (*ptr) {
-    // 查找路径边界（引号或空格）
-    int use_quotes = 0;
-    const char *path_end;
-
-    if (*ptr == '"') {
-      use_quotes = 1;
-      ptr++; // 跳过开头的引号
-      path_end = strchr(ptr, '"');
-    } else {
-      path_end = strchr(ptr, ' ');
-    }
-
-    if (!path_end) {
-      path_end = ptr + strlen(ptr);
-    }
-
-    // 提取单个路径
-    char single_path[MAX_PATH_LENGTH];
-    size_t path_len = path_end - ptr;
-    if (path_len >= MAX_PATH_LENGTH) {
-      path_len = MAX_PATH_LENGTH - 1;
-    }
-    strncpy(single_path, ptr, path_len);
-    single_path[path_len] = '\0';
-
-    // 转换为短路径格式
-    char short_path[MAX_PATH_LENGTH];
-    if (convert_to_short_path(single_path, short_path, sizeof(short_path))) {
-      // 添加到新命令
-      char temp[MAX_PATH_LENGTH + 10];
-      _snprintf_s(temp, sizeof(temp), _TRUNCATE, " \"%s\"", short_path);
-
-      if (current_length + strlen(temp) < MAX_COMMAND_LENGTH) {
-        strcat_s(new_command, MAX_COMMAND_LENGTH, temp);
-        current_length += strlen(temp);
-      }
-    } else {
-      // 转换失败，使用原路径（确保用引号包围）
-      char temp[MAX_PATH_LENGTH + 10];
-      _snprintf_s(temp, sizeof(temp), _TRUNCATE, " \"%s\"", single_path);
-
-      if (current_length + strlen(temp) < MAX_COMMAND_LENGTH) {
-        strcat_s(new_command, MAX_COMMAND_LENGTH, temp);
-        current_length += strlen(temp);
-      }
-    }
-
-    // 移动到下一个路径
-    ptr = path_end;
-    if (*ptr == '"')
-      ptr++;
-    while (*ptr == ' ')
-      ptr++;
-  }
-
-  printf("重试命令: %s\n", new_command);
-
-  // 执行新命令
-  wchar_t *wnew_command = char_to_wchar(new_command);
-  int result = _wsystem(wnew_command);
-  free(wnew_command);
-
-  return (result == 0);
 }
 
 // 创建分组特定的 commit 信息文件
