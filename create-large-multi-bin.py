@@ -5,14 +5,14 @@ import multiprocessing
 import time
 from functools import partial
 
-dir_name = "中a/空格 尾部b"
-dir_prefix = "大 文 件c"
-prefix = "前 缀d"
+dir_name = "中a/空 尾b1"
+dir_prefix = "大 文c2"
+prefix = "d"
 # 总大小设置为GB
-total_size_mb = 1
+total_size_mb = 110
 # 每个文件大小范围
-min_file_size = 0.1 * 1024 * 1024
-max_file_size = 0.3 * 1024 * 1024
+min_file_size = 100 * 1024 * 1024
+max_file_size = 110 * 1024 * 1024
 # 每个文件夹大小范围
 min_folder_size = 500 * 1024 * 1024
 max_folder_size = 1000 * 1024 * 1024
